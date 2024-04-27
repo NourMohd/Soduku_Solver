@@ -35,6 +35,7 @@ class Button:
     def __init__(self,x,y,text,width,height, batch,callback= None):
         self.x = x
         self.y = y
+        self.togglable = False
         fontSize = int(height*0.3)
         self.document = pyglet.text.document.UnformattedDocument(text)
         self.document.set_style(0, len(self.document.text), dict(color=(255, 255, 255, 255),font_size=fontSize))
@@ -92,11 +93,37 @@ class HUD:
                           anchor_x="center",
                           anchor_y="top",
                           color=(0, 0, 0, 255),multiline=True,width=self.size)
+        self.unsatStateLabel = pyglet.text.Label('UNSAT',
+                          font_name='Times New Roman',
+                          font_size=18,
+                          x=self.offset+(self.size), y=window_size * 0.1,
+                          batch=batch,
+                          anchor_x="center",
+                          anchor_y="top",
+                          color=(0, 0, 0, 0),multiline=True,width=self.size)
+        self.solvedStateLabel = pyglet.text.Label('SOLVED',
+                          font_name='Times New Roman',
+                          font_size=18,
+                          x=self.offset+(self.size), y=window_size * 0.1,
+                          batch=batch,
+                          anchor_x="center",
+                          anchor_y="top",
+                          color=(0, 0, 0, 0),multiline=True,width=self.size)
         self.buttons = list()
         self.buttons.append(Button(25,window_size*0.1,"Lock",150,100,batch,lambda x: x.lock_grid()))
-        self.buttons.append(Button(25,window_size*0.6,"Gen",150,100,batch,lambda x: x.gen_board()))
+        self.buttons.append(Button(25,window_size*0.4,"Gen",150,100,batch,lambda x: x.gen_board()))
         self.buttons.append(Button(25,window_size*0.75,"Solve",150,100,batch,lambda x: x.solve_board()))
         self.buttons.append(Button(25,window_size*0.25,"Clear",150,100,batch,lambda x: x.clear_board()))
+        self.buttons.append(Button(110,window_size*0.9,">",50,50,batch,lambda x: x.next_board()))
+        self.buttons.append(Button(40,window_size*0.9,"<",50,50,batch,lambda x: x.prev_board()))
+        self.buttons.append(Button(50,window_size*0.65,"final sol",100,50,batch,lambda x: x.final_board()))
+        verbose_btn = Button(50,window_size*0.57,"Verbose",100,50,batch,None)
+        verbose_btn.togglable = True
+        verbose_btn.rect.color = verbose_btn.hoverColor
+        verbose_btn.callback = lambda x: x.toggle_verbose(verbose_btn)
+        self.buttons.append(verbose_btn)
+
+
 
     def update_domain(self,var):
         if(len(var.domain)==0):
@@ -120,6 +147,10 @@ class Window(pyglet.window.Window):
     HUD_offset = game_offset+game_size
     HUD_size = window_size-HUD_offset
     def __init__(self, *args, **kwargs):
+        self.finalSol = None
+        self.verbose = False
+        self.history = None
+        self.historyCursor = 0
         self.Board = Board(self.handle_incon)
         self.HUD = None
         pyglet.gl.glClearColor(1,1,1,1)
@@ -138,6 +169,7 @@ class Window(pyglet.window.Window):
                 widget.document.text = str(val)
             else:
                 widget.document.text = ''
+        self.handle_incon(self.Board.get_unsatisfiable_vars())
     def draw_init(self):
         Gridbatch = pyglet.graphics.Batch()
         Textbatch = pyglet.graphics.Batch()
@@ -217,10 +249,11 @@ class Window(pyglet.window.Window):
                 self.set_focus(None)
     def on_mouse_motion(self, x, y, dx, dy):
         for widget in self.HUD.buttons:
-            widget.rect.color = widget.defaultColor
-            if widget.hit_test(x, y):
-                widget.rect.color = widget.hoverColor
-                break
+            if not widget.togglable:
+                widget.rect.color =  widget.defaultColor
+                if widget.hit_test(x, y):
+                    widget.rect.color = widget.hoverColor
+                    break
     def on_text(self, text):
         if self.focus:
             if(text.isnumeric() and text !='0'):
@@ -242,11 +275,39 @@ class Window(pyglet.window.Window):
         self.Board = board
         self.draw_board()
     def solve_board(self):
-        board = self.Board.solve()
-        self.Board = board
+        board,history = self.Board.solve(self.verbose)
+        self.history = history
+        self.historyCursor=0
+        if board:
+            self.finalSol = board
+            self.HUD.unsatStateLabel.color = (0,0,0,0)
+            self.HUD.solvedStateLabel.color = (0,0,0,255)
+        else:
+            self.HUD.solvedStateLabel.color = (0,0,0,0)
+            self.HUD.unsatStateLabel.color = (0,0,0,255)
+    def final_board(self):
+        self.Board = self.finalSol
+        self.historyCursor = len(self.history)-1
         self.draw_board()
+    def next_board(self):
+        self.historyCursor+=1
+        self.Board = self.history[self.historyCursor]
+        self.draw_board()
+    def prev_board(self):
+        self.historyCursor-=1
+        self.Board = self.history[self.historyCursor]
+        self.draw_board()
+    def toggle_verbose(self,button):
+        self.verbose = not self.verbose
+        if not self.verbose:
+            button.rect.color = button.hoverColor
+        else:
+            button.rect.color = button.defaultColor
     def clear_board(self):
         self.Board.clear()
+        self.HUD.solvedStateLabel.color = (0,0,0,0)
+        self.HUD.unsatStateLabel.color = (0,0,0,0)
+        self.historyCursor=0
         self.draw_board()
     def lock_grid(self):
         if self.focus in self.textWidgets:

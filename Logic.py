@@ -128,33 +128,59 @@ class Board():
                 if var.val == None:
                     return var
         return None
-    def __solve_sudoku__helper(self,board,verbose=False):
+    def assign_inevitables(self):
+        assigned = False
+        for row in self.vars:
+            for var in row:
+                if var.val:
+                    continue
+                if len(var.domain)==1:
+                    for e in var.domain:
+                        var.set_val(e)
+                        assigned = True
+                        break
+        return assigned
+    def __solve_sudoku__helper(self,board,verbose,history=[]):
         """
         Solves the Sudoku puzzle using backtracking.
         """
         empty_cell = board.find_empty_cell()
         if not empty_cell:
             return True  # All cells are filled, puzzle solved!
-
         for num in empty_cell.domain:
             empty_cell.set_val(num)
             board.force_consistency()
+            if verbose:
+                history.append(board.copy())
+            assigned = board.assign_inevitables()
+            if verbose and assigned:
+                history.append(board.copy())
             if len(board.get_unsatisfiable_vars())>0:
                 board.reset_var(empty_cell.i,empty_cell.j)
+                if verbose:
+                    history.append(board.copy())
                 continue
-            if self.__solve_sudoku__helper(board):
+            if self.__solve_sudoku__helper(board,verbose,history):
                 return True
             board.reset_var(empty_cell.i,empty_cell.j)  # Undo the choice if it leads to an invalid solution
+            if verbose:
+                history.append(board.copy())
         return False
     
-    def solve(self):
+    def solve(self, verbose=False):
         board = self.copy()
         board.notifyUI = None
-        if self.__solve_sudoku__helper(board):
+        history = list()
+        if verbose:
+                history.append(board.copy())
+        if self.__solve_sudoku__helper(board,verbose,history):
             board.notifyUI = self.notifyUI
-            return board
+            if verbose:
+                return board,history
+            else:
+                return board,None
         else:
-            return None
+            return None,None
     def generate_sudoku(self):
         """
         Generates a random valid Sudoku puzzle
@@ -167,7 +193,7 @@ class Board():
         board.force_consistency()
 
         # Solve the entire puzzle to ensure a valid solution exists
-        solved = board.solve()
+        solved,history = board.solve()
         if solved:
             solved.notifyUI = self.notifyUI
             return solved
