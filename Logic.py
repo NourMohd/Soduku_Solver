@@ -1,4 +1,13 @@
 import random
+import timeit
+def time_usage(func):
+    def wrapper(*args, **kwargs):
+        beg_ts = timeit.default_timer()
+        retval = func(*args, **kwargs)
+        end_ts = timeit.default_timer()
+        print("elapsed time: %f" % (end_ts - beg_ts))
+        return retval
+    return wrapper
 class GridVariable():
     def __init__(self,i,j,val=None) -> None:
         self.i = i
@@ -171,7 +180,7 @@ class Board():
             if verbose:
                 history.append(board.copy())
         return False
-    
+    @time_usage
     def solve(self, verbose=False):
         board = self.copy()
         board.notifyUI = None
