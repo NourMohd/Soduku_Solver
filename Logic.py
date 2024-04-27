@@ -123,10 +123,15 @@ class Board():
         board.notifyUI = self.notifyUI
         return board
     def find_empty_cell(self):
-        for row in self.vars:
-            for var in row:
-                if var.val == None:
-                    return var
+        vars = [x for row in self.vars for x in row if len(x.domain)>1]
+        if len(vars)>0:
+            empty =  min(vars,key=lambda x:len(x.domain))
+            if empty.val == None:
+                return empty
+        #for row in self.vars:
+        #    for var in row:
+        #        if var.val == None:
+        #            return var
         return None
     def assign_inevitables(self):
         assigned = False
@@ -151,15 +156,15 @@ class Board():
             empty_cell.set_val(num)
             board.force_consistency()
             if verbose:
-                history.append(board.copy())
-            assigned = board.assign_inevitables()
-            if verbose and assigned:
-                history.append(board.copy())
+                history.append(board.copy()) 
             if len(board.get_unsatisfiable_vars())>0:
                 board.reset_var(empty_cell.i,empty_cell.j)
                 if verbose:
                     history.append(board.copy())
                 continue
+            assigned = board.assign_inevitables()
+            if verbose and assigned:
+                history.append(board.copy())
             if self.__solve_sudoku__helper(board,verbose,history):
                 return True
             board.reset_var(empty_cell.i,empty_cell.j)  # Undo the choice if it leads to an invalid solution
@@ -181,21 +186,33 @@ class Board():
                 return board,None
         else:
             return None,None
-    def generate_sudoku(self):
+    def generate_sudoku(self,level):
         """
         Generates a random valid Sudoku puzzle
         """
         board = Board(None)
         first_row = random.sample(range(1, 10), 9)
         for i,val in enumerate(first_row):
-            board[0][i].update_lock(False)
             board[0][i].set_val(val)
         board.force_consistency()
 
         # Solve the entire puzzle to ensure a valid solution exists
-        solved,history = board.solve()
+        hints = 41 - (3**level)
+        solved,_ = board.solve(False)
         if solved:
             solved.notifyUI = self.notifyUI
-            return solved
+            resets = random.sample(range(81),81-hints)
+            for k in resets:
+                j = (k//9)%9
+                i = (k-j*9)%9
+                solved.reset_var(i,j)
+            for row in solved.vars:
+               for var in row:
+                    var.update_lock(True)
+            ensure_solve,hist = solved.solve()
+            if ensure_solve:
+                return solved
+            else:
+                return self.generate_sudoku(level) 
         else:
-            return self.generate_sudoku() 
+            return self.generate_sudoku(level) 

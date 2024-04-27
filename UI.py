@@ -110,18 +110,35 @@ class HUD:
                           anchor_y="top",
                           color=(0, 0, 0, 0),multiline=True,width=self.size)
         self.buttons = list()
-        self.buttons.append(Button(25,window_size*0.1,"Lock",150,100,batch,lambda x: x.lock_grid()))
+        self.buttons.append(Button(25,window_size*0.05,"Lock",150,100,batch,lambda x: x.lock_grid()))
         self.buttons.append(Button(25,window_size*0.4,"Gen",150,100,batch,lambda x: x.gen_board()))
         self.buttons.append(Button(25,window_size*0.75,"Solve",150,100,batch,lambda x: x.solve_board()))
-        self.buttons.append(Button(25,window_size*0.25,"Clear",150,100,batch,lambda x: x.clear_board()))
-        self.buttons.append(Button(110,window_size*0.9,">",50,50,batch,lambda x: x.next_board()))
-        self.buttons.append(Button(40,window_size*0.9,"<",50,50,batch,lambda x: x.prev_board()))
+        self.buttons.append(Button(25,window_size*0.2,"Clear",150,100,batch,lambda x: x.clear_board()))
+        self.buttons.append(Button(110,window_size*0.87,">",50,50,batch,lambda x: x.next_board()))
+        self.buttons.append(Button(40,window_size*0.87,"<",50,50,batch,lambda x: x.prev_board()))
         self.buttons.append(Button(50,window_size*0.65,"final sol",100,50,batch,lambda x: x.final_board()))
+        
+        level1_btn = Button(50,window_size*0.36,"1",30,30,batch,None)
+        level1_btn.togglable = True
+        level1_btn.callback = lambda x: x.set_level(level1_btn,1)
+
+        level2_btn = Button(85,window_size*0.36,"2",30,30,batch,None)
+        level2_btn.togglable = True
+        level2_btn.callback = lambda x: x.set_level(level2_btn,2)
+        level2_btn.rect.color = level2_btn.hoverColor
+        level3_btn = Button(120,window_size*0.36,"3",30,30,batch,None)
+        level3_btn.togglable = True
+        level3_btn.callback = lambda x: x.set_level(level3_btn,3)
+        level3_btn.rect.color = level3_btn.hoverColor
+        
         verbose_btn = Button(50,window_size*0.57,"Verbose",100,50,batch,None)
         verbose_btn.togglable = True
         verbose_btn.rect.color = verbose_btn.hoverColor
         verbose_btn.callback = lambda x: x.toggle_verbose(verbose_btn)
         self.buttons.append(verbose_btn)
+        self.buttons.append(level1_btn)
+        self.buttons.append(level2_btn)
+        self.buttons.append(level3_btn)
 
 
 
@@ -153,6 +170,7 @@ class Window(pyglet.window.Window):
         self.historyCursor = 0
         self.Board = Board(self.handle_incon)
         self.HUD = None
+        self.level = 1
         pyglet.gl.glClearColor(1,1,1,1)
         super(Window, self).__init__(self.window_size,self.window_size, caption='Soduko', *args, **kwargs)
         self.batches = list()
@@ -164,11 +182,18 @@ class Window(pyglet.window.Window):
     def draw_board(self):
         for k,widget in enumerate(self.textWidgets):
             i,j = self.index_to_cart(k)
-            val = self.Board[i][j].val
+            var = self.Board[i][j]
+            val = var.val
             if val:
                 widget.document.text = str(val)
             else:
                 widget.document.text = ''
+
+            if var.readOnly:
+                self.unsatWidgets[k].color = self.HUD.lockedColor
+            else:
+                self.unsatWidgets[k].color = self.HUD.defaultColor
+                
         self.handle_incon(self.Board.get_unsatisfiable_vars())
     def draw_init(self):
         Gridbatch = pyglet.graphics.Batch()
@@ -264,6 +289,7 @@ class Window(pyglet.window.Window):
                 self.focus.document.text = str(active_var.val)
                 self.Board.force_consistency()
                 self.HUD.update_domain(active_var)
+                self.handle_incon(self.Board.get_unsatisfiable_vars())
     def cart_to_index(self,i,j):      
         return i+j*9
     def index_to_cart(self,k):
@@ -271,7 +297,8 @@ class Window(pyglet.window.Window):
         i = (k-j*9)%9
         return i,j
     def gen_board(self):
-        board = self.Board.generate_sudoku()
+        self.clear_board()
+        board = self.Board.generate_sudoku(self.level)
         self.Board = board
         self.draw_board()
     def solve_board(self):
@@ -286,17 +313,24 @@ class Window(pyglet.window.Window):
             self.HUD.solvedStateLabel.color = (0,0,0,0)
             self.HUD.unsatStateLabel.color = (0,0,0,255)
     def final_board(self):
-        self.Board = self.finalSol
-        self.historyCursor = len(self.history)-1
-        self.draw_board()
+        if(self.finalSol):
+            self.Board = self.finalSol
+            if self.history:
+                self.historyCursor = len(self.history)-1
+            self.draw_board()
     def next_board(self):
-        self.historyCursor+=1
+        self.historyCursor= (self.historyCursor +1)%len(self.history)
         self.Board = self.history[self.historyCursor]
         self.draw_board()
     def prev_board(self):
-        self.historyCursor-=1
+        self.historyCursor= (self.historyCursor -1)%len(self.history)
         self.Board = self.history[self.historyCursor]
         self.draw_board()
+    def set_level(self,button,level):
+        self.level = level
+        for btn in self.HUD.buttons[-3:]:
+            btn.rect.color = button.hoverColor
+        button.rect.color = button.defaultColor
     def toggle_verbose(self,button):
         self.verbose = not self.verbose
         if not self.verbose:
@@ -341,6 +375,7 @@ class Window(pyglet.window.Window):
                 self.focus.document.text = ''
                 self.Board.reset_var(i,j)
                 self.HUD.update_domain(self.Board[i][j])
+                self.draw_board()
         elif symbol == pyglet.window.key.CAPSLOCK:
             self.lock_grid()
         elif symbol == pyglet.window.key.ESCAPE:
